@@ -1,0 +1,3 @@
+[submodule "Docs-Sec"]
+	path = Docs-Sec
+	url = https://github.com/maykon-marcos-jr/Security-INE5429.wiki.git
