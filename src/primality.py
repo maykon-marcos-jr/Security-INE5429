@@ -18,6 +18,9 @@ Aumentar o número de execuções com diferentes valores de "a" diminui essa pro
 """
 
 def euclides_extendido(a, b):
+    """
+    https://www.geeksforgeeks.org/python/python-program-for-basic-and-extended-euclidean-algorithms-2/
+    """
     x0 = 1
     y0 = 0
     x1 = 0
