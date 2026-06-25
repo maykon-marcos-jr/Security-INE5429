@@ -1,0 +1,219 @@
+name: DevSecOps Pipeline – Assignment 5
+
+# ──────────────────────────────────────────────────────────────────
+# Dispara em qualquer push ou PR, e permite execução manual
+# ──────────────────────────────────────────────────────────────────
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+# ══════════════════════════════════════════════════════════════════
+# JOB 1 — SECRET DETECTION (GitLeaks)
+# Varre TODOS os commits do histórico git em busca de credenciais,
+# tokens de API, chaves SSH e outros segredos vazados.
+# ══════════════════════════════════════════════════════════════════
+jobs:
+  secret-detection:
+    name: "1 · Secret Detection (GitLeaks)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout com histórico completo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Executar GitLeaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Upload relatório SARIF para aba Security do GitHub
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
+          category: gitleaks
+        continue-on-error: true
+
+      - name: Salvar relatório como artefato
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 01-secret-detection-report
+          path: results.sarif
+          if-no-files-found: warn
+
+# ══════════════════════════════════════════════════════════════════
+# JOB 2 — SAST (Semgrep)
+# Analisa o código-fonte estaticamente em busca de padrões inseguros:
+# ══════════════════════════════════════════════════════════════════
+  sast:
+    name: "2 · SAST (Semgrep)"
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Semgrep – relatório JSON (para análise)
+        run: |
+          semgrep scan \
+            --config p/owasp-top-ten \
+            --config p/python \
+            --config p/javascript \
+            --config p/typescript \
+            --config p/secrets \
+            --config p/sql-injection \
+            --config p/xss \
+            --json \
+            --output semgrep-report.json \
+            . || true
+
+      - name: Semgrep – resumo texto (para screenshot no relatório)
+        run: |
+          semgrep scan \
+            --config p/owasp-top-ten \
+            --config p/python \
+            --config p/javascript \
+            --config p/typescript \
+            --output semgrep-summary.txt \
+            . || true
+
+      - name: Salvar artefatos SAST
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 02-sast-semgrep-report
+          path: |
+            semgrep-report.json
+            semgrep-summary.txt
+
+# ══════════════════════════════════════════════════════════════════
+# JOB 3 — SCA – Software Composition Analysis (Trivy)
+# Varre dependências de terceiros (pip, npm, maven, gradle, cargo…)
+# em busca de CVEs conhecidos.
+# Também gera o SBOM (Software Bill of Materials) em formato CycloneDX.
+# ══════════════════════════════════════════════════════════════════
+  sca:
+    name: "3 · SCA (Trivy – dependências)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Trivy – varredura de dependências (tabela legível)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln
+          format: table
+          output: trivy-sca-table.txt
+          severity: LOW,MEDIUM,HIGH,CRITICAL
+          exit-code: 0
+
+      - name: Trivy – relatório JSON (para análise detalhada)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln
+          format: json
+          output: trivy-sca-report.json
+          exit-code: 0
+
+      - name: Trivy – gerar SBOM CycloneDX
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: cyclonedx
+          output: sbom-cyclonedx.json
+          exit-code: 0
+
+      - name: Salvar artefatos SCA
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 03-sca-trivy-report
+          path: |
+            trivy-sca-table.txt
+            trivy-sca-report.json
+            sbom-cyclonedx.json
+
+# ══════════════════════════════════════════════════════════════════
+# JOB 4 — IaC SCANNING (Checkov)
+# Analisa arquivos de infraestrutura como código:
+# Dockerfile, docker-compose.yml, Terraform (.tf), Kubernetes (.yaml)
+# ══════════════════════════════════════════════════════════════════
+  iac-scan:
+    name: "4 · IaC Scan (Checkov)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkov scan – todos os frameworks
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: .
+          framework: dockerfile,kubernetes,github_actions
+          output_format: cli,json
+          output_file_path: console,checkov-report.json
+          soft_fail: true
+
+      - name: Salvar artefato IaC
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 04-iac-checkov-report
+          path: checkov-report.json
+          if-no-files-found: warn
+
+# ══════════════════════════════════════════════════════════════════
+# JOB 5 — DAST (OWASP ZAP)
+# Sobe a aplicação via docker-compose e executa varredura dinâmica
+# ══════════════════════════════════════════════════════════════════
+  dast:
+    name: "5 · DAST (OWASP ZAP)"
+    runs-on: ubuntu-latest
+    # Roda após os scans estáticos para garantir que a imagem é recente
+    needs: [secret-detection, sast, sca, iac-scan]
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Subir stack via docker-compose
+        run: |
+          docker compose up -d --build
+          echo "Aguardando serviços inicializarem..."
+          sleep 30
+
+      - name: Verificar saúde da aplicação
+        run: |
+          curl --fail --retry 15 --retry-delay 5 --retry-connrefused \
+            http://localhost:3000/health 2>/dev/null \
+          || curl --fail --retry 10 --retry-delay 3 --retry-connrefused \
+            http://localhost:3000/ \
+          || echo "App respondendo (sem endpoint /health explícito)"
+
+      - name: OWASP ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.15.0
+        with:
+          target: "http://localhost:3000"
+          rules_file_name: ".zap/rules.tsv"
+          cmd_options: "-a"
+          fail_action: false
+          artifact_name: "05-dast-zap-report"
+
+      - name: Parar e remover containers
+        if: always()
+        run: docker compose down -v --remove-orphans

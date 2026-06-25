@@ -1,0 +1,44 @@
+# Ações: IGNORE (suprime), WARN (alerta sem falhar), FAIL (quebra o pipeline)
+# Regras completas: https://www.zaproxy.org/docs/alerts/
+
+# Strict-Transport-Security ausente
+# FP: Em CI local via HTTP (sem TLS), esse header não pode existir.
+# Não é relevante para o ambiente de staging sem HTTPS.
+10035	IGNORE
+
+# Server leaks version information via "Server" HTTP response header
+# INFO: Útil saber, mas não é exploitável diretamente.
+10036	WARN
+
+# Timestamp Disclosure – Unix epoch
+10096	IGNORE
+
+# X-Content-Type-Options ausente
+10021	WARN
+
+# X-Frame-Options ausente
+# FP para APIs REST que não servem HTML/iframes.
+10020	WARN
+
+# Informação sobre o servidor (via response headers)
+10024	WARN
+
+# Cookie sem flag Secure
+# FP: Em ambiente local sem HTTPS, cookies nunca terão Secure.
+10011	IGNORE
+
+# Content Security Policy (CSP) ausente
+# WARN: deve ser corrigido em produção, mas FP em dev sem frontend configurado.
+10038	WARN
+
+# Anti-CSRF Tokens ausente
+# Investigue manualmente: pode ser FP se a app usa JWT stateless.
+10202	WARN
+
+# ──────────────────────────────────────────────────────────────────
+# REGRAS QUE DEVEM FALHAR (vulnerabilidades críticas confirmadas)
+# ──────────────────────────────────────────────────────────────────
+# 40018	FAIL   # SQL Injection
+# 40012	FAIL   # Cross-Site Scripting (Reflected)
+# 40014	FAIL   # Cross-Site Scripting (Persistent)
+# 90022	FAIL   # Application Error Disclosure

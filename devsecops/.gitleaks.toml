@@ -1,0 +1,67 @@
+# Configuração para suprimir falsos positivos conhecidos do GitLeaks.
+
+# Documentação: https://github.com/gitleaks/gitleaks#configuration
+
+title = "GitLeaks – Configuração Assignment 5"
+
+# Extende as regras padrão do GitLeaks (mantém todas as detecções originais)
+[extend]
+useDefault = true
+
+# ──────────────────────────────────────────────────────────────────
+# ALLOWLIST GLOBAL: caminhos que são sempre ignorados
+# Adicione aqui padrões que geram FPs no SEU projeto
+# ──────────────────────────────────────────────────────────────────
+[[allowlists]]
+description = "Credenciais de exemplo em arquivos de documentação e template"
+paths = [
+  '''(^|/)README(\.\w+)?$''',
+  '''(^|/)CHANGELOG(\.\w+)?$''',
+  '''(^|/)docs/''',
+  '''\.example$''',
+  '''\.sample$''',
+  '''\.template$''',
+  '''\.md$''',
+]
+# Palavras que indicam que é só um exemplo
+stopWords = [
+  "example", "placeholder", "changeme", "your-token-here",
+  "fake", "dummy", "test", "sample", "replace-me", "xxx",
+  "YOUR_API_KEY", "<API_KEY>", "INSERT_HERE",
+]
+
+[[allowlists]]
+description = "Tokens em arquivos de configuração de ambiente de exemplo"
+paths = [
+  '''\.env\.example$''',
+  '''\.env\.sample$''',
+  '''\.env\.template$''',
+  '''docker-compose\.yml$''',
+]
+regexes = [
+  '''\$\{[A-Z_]+\}''',
+  '''\$\([A-Z_]+\)''',
+  '''<[A-Z_\-]+>''',
+  '''CHANGE.?ME''',
+  '''YOUR.{0,20}HERE''',
+]
+
+[[allowlists]]
+description = "Arquivos de teste unitário"
+paths = [
+  '''(^|/)tests?/''',
+  '''(^|/)spec/''',
+  '''(^|/)__tests__/''',
+  '''(^|/)fixtures?/''',
+  '''_test\.(py|go|js|ts|rb|java)$''',
+  '''\.test\.(js|ts)$''',
+  '''\.spec\.(js|ts)$''',
+]
+
+[[allowlists]]
+description = "Chaves de exemplo na documentação do Swagger/OpenAPI"
+paths = [
+  '''swagger''',
+  '''openapi''',
+  '''(^|/)api-docs/''',
+]
